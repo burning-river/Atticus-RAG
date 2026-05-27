@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG PDF Chatbot</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f9; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .upload-section { background: white; width: 400px; padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: flex; gap: 10px; align-items: center; }
+        .chat-container { width: 430px; height: 450px; background: white; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; }
+        .chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .message { padding: 10px; border-radius: 8px; max-width: 75%; word-wrap: break-word; }
+        .user { background: #0078d4; color: white; align-self: flex-end; }
+        .bot { background: #f1f1f1; color: #333; align-self: flex-start; }
+        .input-area { display: flex; border-top: 1px solid #ddd; padding: 10px; background: #fff; }
+        input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; outline: none; }
+        button { background: #0078d4; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+        button:disabled { background: #cccccc; }
+    </style>
+</head>
+<body>
+
+<!-- 1. PDF UPLOAD SECTION -->
+<div class="upload-section">
+    <input type="file" id="pdfFile" accept=".pdf">
+    <button id="uploadBtn" onclick="uploadPDF()">Upload PDF</button>
+</div>
+
+<!-- 2. CHAT SECTION -->
+<div class="chat-container">
+    <div class="chat-box" id="chatBox">
+        <div class="message bot">Please upload a PDF first, then ask your questions!</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="Ask something about the PDF..." onkeypress="if(event.key === 'Enter') sendMessage()" disabled>
+        <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+    </div>
+</div>
+
+<script>
+    const BASE_URL = "https://rag-app.grayground-9aa9a7ee.eastus.azurecontainerapps.io"; 
+
+    async function uploadPDF() {
+        const fileInput = document.getElementById("pdfFile");
+        const uploadBtn = document.getElementById("uploadBtn");
+        const chatBox = document.getElementById("chatBox");
+
+        if (fileInput.files.length === 0) {
+            alert("Please select a PDF file first.");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]); // Make sure "file" matches your FastAPI parameter name
+
+        uploadBtn.innerText = "Uploading...";
+        uploadBtn.disabled = true;
+
+        try {
+            // Sends the actual PDF file to your dynamic FastAPI backend
+            const response = await fetch(`${BASE_URL}/upload`, { 
+                method: "POST",
+                body: formData
+            });
+
+            if (response.ok) {
+                appendMessage("PDF uploaded and processed successfully! You can now ask questions.", 'bot');
+                document.getElementById("userInput").disabled = false;
+                document.getElementById("sendBtn").disabled = false;
+                uploadBtn.innerText = "Uploaded!";
+            } else {
+                appendMessage("Failed to process the PDF. Check backend logs.", 'bot');
+                uploadBtn.innerText = "Upload PDF";
+                uploadBtn.disabled = false;
+            }
+        } catch (error) {
+            appendMessage("Error uploading file to server.", 'bot');
+            console.error(error);
+            uploadBtn.innerText = "Upload PDF";
+            uploadBtn.disabled = false;
+        }
+    }
+
+    async function sendMessage() {
+        const inputField = document.getElementById("userInput");
+        const text = inputField.value.trim();
+        if (!text) return;
+
+        appendMessage(text, 'user');
+        inputField.value = "";
+        const loadingDiv = appendMessage("Searching PDF and generating answer...", 'bot');
+
+        try {
+            const response = await fetch(`${BASE_URL}/query`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ question: text }) 
+            });
+
+            const data = await response.json();
+            loadingDiv.remove();
+            appendMessage(data.response || data.answer || JSON.stringify(data), 'bot'); 
+        } catch (error) {
+            loadingDiv.innerText = "Error getting response.";
+            console.error(error);
+        }
+    }
+
+    function appendMessage(text, sender) {
+        const chatBox = document.getElementById("chatBox");
+        const msgDiv = document.createElement("div");
+        msgDiv.className = `message ${sender}`;
+        msgDiv.innerText = text;
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+        return msgDiv;
+    }
+</script>
+
+</body>
+</html>
