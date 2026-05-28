@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Step-by-Step RAG App</title>
+    <title>Simplified RAG App</title>
     <style>
         body { font-family: Arial, sans-serif; background: #f4f4f9; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
         .step-card { background: white; width: 400px; padding: 20px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        .disabled { opacity: 0.5; pointer-events: none; }
         .chat-box { height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: #fafafa; border-radius: 4px; display: flex; flex-direction: column; gap: 8px; }
         .message { padding: 8px; border-radius: 6px; max-width: 80%; word-wrap: break-word; }
         .user { background: #0078d4; color: white; align-self: flex-end; }
         .bot { background: #e1e1e1; color: #333; align-self: flex-start; }
         .input-row { display: flex; gap: 5px; }
-        input[type="text"], input[type="password"] { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; outline: none; }
+        input[type="text"] { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; outline: none; }
         button { background: #0078d4; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
         button:hover { background: #005a9e; }
         .status { font-size: 12px; margin-top: 5px; font-weight: bold; }
@@ -22,103 +21,71 @@
 </head>
 <body>
 
-    <!-- STEP 1: API KEY VALIDATION -->
-    <div class="step-card" id="step1">
-        <h3>Step 1: Authenticate</h3>
-        <div class="input-row">
-            <input type="password" id="apiKey" placeholder="Enter API Key">
-            <button onclick="verifyKey()">Verify</button>
-        </div>
-        <div id="step1Status" class="status"></div>
-    </div>
-
-    <!-- STEP 2: PDF UPLOAD (Locked initially) -->
-    <div class="step-card disabled" id="step2">
-        <h3>Step 2: Upload Document</h3>
+    <!-- STEP 1: PDF UPLOAD -->
+    <div class="step-card" id="uploadCard">
+        <h3>Step 1: Upload Document</h3>
         <div class="input-row">
             <input type="file" id="pdfFile" accept=".pdf">
-            <button onclick="uploadPDF()">Upload</button>
+            <button type="button" onclick="uploadPDF(event)">Upload</button>
         </div>
-        <div id="step2Status" class="status"></div>
+        <div id="uploadStatus" class="status"></div>
     </div>
 
-    <!-- STEP 3: RAG QUERY (Locked initially) -->
-    <div class="step-card disabled" id="step3">
-        <h3>Step 3: Query Document</h3>
+    <!-- STEP 2: RAG QUERY -->
+    <div class="step-card" id="queryCard">
+        <h3>Step 2: Query Document</h3>
         <div class="chat-box" id="chatBox">
-            <div class="message bot">System ready. Ask your questions below!</div>
+            <div class="message bot">Upload a PDF above, then ask your questions here!</div>
         </div>
         <div class="input-row">
             <input type="text" id="queryInput" placeholder="Ask something..." onkeypress="if(event.key === 'Enter') sendQuery()">
-            <button onclick="sendQuery()">Ask</button>
+            <button type="button" onclick="sendQuery(event)">Ask</button>
         </div>
     </div>
 
 <script>
-    const BASE_URL = "https://rag-app.grayground-9aa9a7ee.eastus.azurecontainerapps.io"; 
+    // ⚠️ Pointing directly to your local FastAPI Uvicorn Instance
+    const BASE_URL = "http://127.0.0.1:8000"; 
     
-    // State Tracking variables
-    let validatedToken = "";
-    let serverFilename = "";
+    // State variable to track the document file name reference
+    // 💡 FIXED: Read from sessionStorage. If the page reloads, your filename stays safe!
+    let serverFilename = sessionStorage.getItem("saved_rag_filename") || "";
 
-    // 1. VERIFY KEY
-    async function verifyKey() {
-        const keyInput = document.getElementById("apiKey");
-        const key = keyInput.value.trim();
-        const statusDiv = document.getElementById("step1Status");
-        if(!key) return;
-
-        const formData = new FormData();
-        formData.append("api_key", key); // Matches FastAPI dependency field parameter name
-
-        try {
-            const response = await fetch(`${BASE_URL}/api/verify`, { 
-                method: "POST", 
-                body: formData 
-            });
-            
-            if(response.ok) {
-                validatedToken = key; // Save token for future multi-step requests
-                statusDiv.className = "status success";
-                statusDiv.innerText = "✓ Key authenticated. Step 2 unlocked.";
-                document.getElementById("step2").classList.remove("disabled");
-                keyInput.disabled = true;
-            } else {
-                statusDiv.className = "status error";
-                statusDiv.innerText = "✗ Invalid key. Access denied.";
-            }
-        } catch (err) {
-            statusDiv.className = "status error";
-            statusDiv.innerText = "Connection error to authentication server.";
-            console.error(err);
+    // Automatically check if a file was already uploaded when the page loads
+    window.onload = function() {
+        if (serverFilename) {
+            const statusDiv = document.getElementById("uploadStatus");
+            statusDiv.className = "status success";
+            statusDiv.innerText = `✓ Restored session: ${serverFilename} is active.`;
+            document.getElementById("pdfFile").disabled = true;
         }
-    }
+    };
 
-    // 2. UPLOAD PDF
-    async function uploadPDF() {
+    // 1. UPLOAD PDF
+    async function uploadPDF(event) {
+        if(event) event.preventDefault();
         const fileInput = document.getElementById("pdfFile");
-        const statusDiv = document.getElementById("step2Status");
+        const statusDiv = document.getElementById("uploadStatus");
         if(fileInput.files.length === 0) return alert("Please select a PDF file first.");
 
         const formData = new FormData();
         formData.append("file", fileInput.files[0]);
-        formData.append("api_key", validatedToken); // Passes authentication token to protected upload endpoint
 
         statusDiv.className = "status";
-        statusDiv.innerText = "Uploading file and starting background indexer...";
+        statusDiv.innerText = "Uploading file to server...";
 
         try {
             const response = await fetch(`${BASE_URL}/api/upload`, { 
                 method: "POST", 
-                body: formData 
+                body: formData // No custom authorization headers are attached here anymore
             });
             const data = await response.json();
             
             if(response.ok) {
-                serverFilename = data.filename; // Store filename reference for query execution
+                serverFilename = data.filename; 
+                sessionStorage.setItem("saved_rag_filename", serverFilename);
                 statusDiv.className = "status success";
-                statusDiv.innerText = `✓ ${serverFilename} uploaded. Step 3 unlocked.`;
-                document.getElementById("step3").classList.remove("disabled");
+                statusDiv.innerText = `✓ ${serverFilename} successfully saved on local storage.`;
                 fileInput.disabled = true;
             } else {
                 statusDiv.className = "status error";
@@ -126,44 +93,66 @@
             }
         } catch (err) {
             statusDiv.className = "status error";
-            statusDiv.innerText = "Server connection lost during file transmission.";
+            statusDiv.innerText = "Server connection failure during document transmission.";
             console.error(err);
         }
     }
 
-    // 3. SEND QUERY
-    async function sendQuery() {
+    // 2. SEND QUERY
+    async function sendQuery(event) {
+        if(event) event.preventDefault();
         const queryInput = document.getElementById("queryInput");
         const queryText = queryInput.value.trim();
+        
+        if(!serverFilename) {
+            return alert("Please upload a PDF file in Step 1 before querying.");
+        }
         if(!queryText) return;
 
-        // Visual append to chat interface
+        // Immediately show user question in chat box
         appendMessage(queryText, "user");
         queryInput.value = "";
         
-        const loadingDiv = appendMessage("Processing RAG embeddings and querying LLM...", "bot");
+        // Spawn a blank bot bubble to absorb incoming streaming text tokens
+        const botBubble = appendMessage("", "bot");
+        botBubble.innerHTML = "<em>Invoking RAG pipeline model...</em>";
 
         const formData = new FormData();
         formData.append("filename", serverFilename);
         formData.append("query", queryText);
-        formData.append("api_key", validatedToken); // Passes authentication token to protected query endpoint
 
         try {
             const response = await fetch(`${BASE_URL}/api/query`, { 
                 method: "POST", 
                 body: formData 
             });
-            const data = await response.json();
-            loadingDiv.remove();
 
-            if(response.ok) {
-                // Displays backend response block
-                appendMessage(data.response || data.answer || JSON.stringify(data), "bot");
-            } else {
-                appendMessage(`Error (${response.status}): ${data.detail || 'Failed processing request'}`, "bot");
+            if (!response.ok) {
+                const errData = await response.json();
+                botBubble.innerText = `Error (${response.status}): ${JSON.stringify(errData.detail || errData)}`;
+                return;
+            }
+
+            // Evaporate the initialization string once stream bytes unlock
+            botBubble.innerText = "";
+
+            // Hook reader to ingest token-by-token streaming values
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                botBubble.innerText += chunk;
+                
+                // Continuous automatic downward scroll lock
+                const chatBox = document.getElementById("chatBox");
+                chatBox.scrollTop = chatBox.scrollHeight;
             }
         } catch (err) {
-            loadingDiv.innerText = "Network pipeline error pulling response.";
+            botBubble.innerText = "Network pipeline error pulling streaming response pipeline.";
             console.error(err);
         }
     }
