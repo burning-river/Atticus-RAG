@@ -1,3 +1,5 @@
+--extra-index-url https://pytorch.org
+
 accelerate==1.13.0
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.5
@@ -126,7 +128,7 @@ safetensors==0.7.0
 scikit-learn==1.8.0
 scikit-network==0.33.5
 scipy==1.17.1
-sentence-transformers==5.5.0
+sentence-transformers[onnx]==5.5.0
 setuptools==81.0.0
 shellingham==1.5.4
 six==1.17.0
