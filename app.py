@@ -1,3 +1,5 @@
+from fileinput import filename
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Security, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.security import APIKeyHeader
@@ -54,7 +56,8 @@ app = FastAPI(title="RAG Model API", description="Production API for PDF Questio
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "*" 
+        # "https://burning-river.github.io"
+        "*"
     ],
     allow_origin_regex="file://.*", 
     allow_credentials=False,
@@ -105,9 +108,11 @@ async def upload_file(background_tasks: BackgroundTasks, # Inject the FastAPI ba
                     #   authenticated_key: str = Depends(validate_api_key)
                       ):
 
-    storage_dir = Path("./data/rag_files") 
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    file_path = storage_dir / file.filename
+    # storage_dir = Path("./data/rag_files") 
+    # storage_dir.mkdir(parents=True, exist_ok=True)
+    # file_path = storage_dir / file.filename
+    os.makedirs("/tmp/rag_files", exist_ok=True)
+    file_path = f"/tmp/rag_files/{file.filename}"
     
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -122,10 +127,11 @@ async def query_pdf(
     query: str = Form(..., description="The question you want to ask the RAG model"),
 ):
     
-    storage_dir = Path("./data/rag_files")
-    temp_file_path = storage_dir / filename
+    # storage_dir = Path("./data/rag_files")
+    # temp_file_path = storage_dir / filename
+    file_path_str = f"/tmp/rag_files/{filename}"
 
-    file_path_str  = str(temp_file_path.resolve())
+    # file_path_str  = str(temp_file_path.resolve())
 
     # 1. Validate file type
     if not filename.endswith('.pdf'):
@@ -177,4 +183,6 @@ async def query_pdf(
 
 if __name__ == "__main__":
     # Force the app to load as a strict import string string
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.getenv("PORT", 8000)) 
+
+    uvicorn.run("app:app", host="0.0.0.0", port=port)
