@@ -1,6 +1,6 @@
 from huggingface_hub import InferenceClient
 import numpy as np
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
 import os
 from dotenv import load_dotenv

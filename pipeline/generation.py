@@ -3,7 +3,7 @@ import os
 from huggingface_hub import AsyncInferenceClient
 import asyncio
 from threading import Thread
-from transformers import TextIteratorStreamer
+# from transformers import TextIteratorStreamer
 
 HF_TOKEN = os.getenv("HF_API_TOKEN")
 

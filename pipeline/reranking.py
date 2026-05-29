@@ -1,7 +1,6 @@
 from sentence_transformers import CrossEncoder
 
-cross_encoder_model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-12-v2')
-
+cross_encoder_model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-12-v2', backend="onnx")
 
 def rerank_documents(query: str, documents: list[str], top_k: int = 5) -> list[str]:
     if not documents:
