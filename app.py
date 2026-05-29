@@ -56,8 +56,7 @@ app = FastAPI(title="RAG Model API", description="Production API for PDF Questio
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        # "https://burning-river.github.io"
-        "*"
+        "https://burning-river.github.io"
     ],
     allow_origin_regex="file://.*", 
     allow_credentials=False,
