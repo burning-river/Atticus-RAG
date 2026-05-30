@@ -46,7 +46,7 @@ logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("watchfiles").setLevel(logging.WARNING)     # Silences "1 change detected"
 logging.getLogger("transformers").setLevel(logging.ERROR)   # Silences HuggingFace chatter
 
-env_keys = os.getenv("VALID_API_KEYS", "")
+env_keys = os.getenv("VALID_API_KEYS")
 VALID_API_KEYS = set(env_keys.split(",")) if env_keys else set()
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
@@ -57,6 +57,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://burning-river.github.io"
+        # "*"
     ],
     allow_origin_regex="file://.*", 
     allow_credentials=False,
@@ -86,25 +87,28 @@ def cleanup_temp_file(file_path: str):
 
 print("Loading RAG models and embeddings into memory...")
 
-# @app.post("/api/verify")
-# async def validate_api_key(api_key: str = Security(api_key_header)):
+async def validate_api_key(api_key: str = Security(api_key_header)):
 #     """Validates the presence and authenticity of the X-API-Key header."""
-#     if not api_key:
-#         raise HTTPException(
-#             status_code=401, 
-#             detail="Authentication credentials missing. Please provide an X-API-Key header."
-#         )
-#     if api_key not in VALID_API_KEYS:
-#         raise HTTPException(
-#             status_code=403, 
-#             detail="Access Denied: Invalid API Key provided."
-#         )
-#     return api_key
+    if not api_key:
+        raise HTTPException(
+            status_code=401, 
+            detail="Authentication credentials missing. Please provide an X-API-Key header."
+        )
+    if api_key not in VALID_API_KEYS:
+        raise HTTPException(
+            status_code=403, 
+            detail="Access Denied: Invalid API Key provided."
+        )
+    return api_key
+
+@app.get("/api/validate-key")
+async def validate_key(authenticated_key: str = Depends(validate_api_key)):
+    return {"message": "Key is valid."}
 
 @app.post("/api/upload")
 async def upload_file(background_tasks: BackgroundTasks, # Inject the FastAPI background task tool
                       file: UploadFile = File(...),
-                    #   authenticated_key: str = Depends(validate_api_key)
+                      authenticated_key: str = Depends(validate_api_key)
                       ):
 
     # storage_dir = Path("./data/rag_files") 
@@ -116,7 +120,7 @@ async def upload_file(background_tasks: BackgroundTasks, # Inject the FastAPI ba
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    print('file uploaded and saved to disk at:', file_path)
+    # print('file uploaded and saved to disk at:', file_path)
     
     return {"message": "File uploaded successfully", "filename": file.filename}
 
@@ -124,6 +128,7 @@ async def upload_file(background_tasks: BackgroundTasks, # Inject the FastAPI ba
 async def query_pdf(
     filename: str = Form(..., description="The PDF document to analyze"),
     query: str = Form(..., description="The question you want to ask the RAG model"),
+    authenticated_key: str = Depends(validate_api_key)
 ):
     
     # storage_dir = Path("./data/rag_files")
@@ -137,7 +142,7 @@ async def query_pdf(
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
     start_time = time.time()
-    # logger.info(f"Authenticated Request (Key: Token...{authenticated_key[-4:]}) -> File: {filename}")
+    logger.info(f"Authenticated Request (Key: Token...{authenticated_key[-4:]}) -> File: {filename}")
     gpu_start_mem = get_gpu_memory_used()
     print('--- Starting RAG processing pipeline ---')
 

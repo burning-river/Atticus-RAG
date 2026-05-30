@@ -21,6 +21,17 @@
 </head>
 <body>
 
+    <!-- STEP 0: API KEY -->
+    <div class="step-card">
+        <h3>Step 0: Enter API Key</h3>
+        <div class="input-row">
+            <input type="password" id="apiKey" placeholder="Enter your API key..." 
+                onkeypress="if(event.key === 'Enter') saveApiKey()">
+            <button type="button" onclick="saveApiKey()">Save</button>
+        </div>
+        <div id="keyStatus" class="status"></div>
+    </div>
+    
     <!-- STEP 1: PDF UPLOAD -->
     <div class="step-card" id="uploadCard">
         <h3>Step 1: Upload Document</h3>
@@ -46,6 +57,7 @@
 <script>
     // ⚠️ Pointing directly to your local FastAPI Uvicorn Instance
     const BASE_URL = "https://o10a2xelccuda32qke6fx364.77.42.126.14.sslip.io"; 
+    // const BASE_URL = "http://localhost:8000";
     
     // State variable to track the document file name reference
     // 💡 FIXED: Read from sessionStorage. If the page reloads, your filename stays safe!
@@ -61,9 +73,53 @@
         }
     };
 
+    function getApiKey() {
+    const key = document.getElementById("apiKey").value.trim();
+    if (!key) {
+        alert("Please enter your API key in Step 0 first.");
+        return null;
+        }
+    return key;
+    }
+
+    async function saveApiKey() {
+    const keyInput = document.getElementById("apiKey");
+    const statusDiv = document.getElementById("keyStatus");
+    const key = keyInput.value.trim();
+
+    if (!key) {
+        statusDiv.className = "status error";
+        statusDiv.innerText = "✗ Please enter a key.";
+        return;
+    }
+
+    // Validate against the server with a lightweight test request
+    try {
+        const response = await fetch(`${BASE_URL}/api/validate-key`, {
+            method: "GET",
+            headers: { "X-API-Key": key }
+        });
+
+        if (response.ok) {
+            statusDiv.className = "status success";
+            statusDiv.innerText = "✓ API key accepted.";
+            keyInput.disabled = true;  // lock it once confirmed
+        } else {
+            statusDiv.className = "status error";
+            statusDiv.innerText = "✗ Invalid API key.";
+        }
+    } catch (err) {
+        statusDiv.className = "status error";
+        statusDiv.innerText = "✗ Could not reach server to validate key.";
+    }
+}
+
     // 1. UPLOAD PDF
     async function uploadPDF(event) {
         if(event) event.preventDefault();
+        const apiKey = getApiKey();
+        if (!apiKey) return;
+
         const fileInput = document.getElementById("pdfFile");
         const statusDiv = document.getElementById("uploadStatus");
         if(fileInput.files.length === 0) return alert("Please select a PDF file first.");
@@ -77,6 +133,7 @@
         try {
             const response = await fetch(`${BASE_URL}/api/upload`, { 
                 method: "POST", 
+                headers: { "X-API-Key": apiKey },
                 body: formData // No custom authorization headers are attached here anymore
             });
             const data = await response.json();
@@ -101,6 +158,8 @@
     // 2. SEND QUERY
     async function sendQuery(event) {
         if(event) event.preventDefault();
+        const apiKey = getApiKey();
+        if (!apiKey) return; 
         const queryInput = document.getElementById("queryInput");
         const queryText = queryInput.value.trim();
         
@@ -123,7 +182,8 @@
 
         try {
             const response = await fetch(`${BASE_URL}/api/query`, { 
-                method: "POST", 
+                method: "POST",
+                headers: { "X-API-Key": apiKey }, 
                 body: formData 
             });
 
